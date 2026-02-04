@@ -52,6 +52,7 @@ class UserController {
 
     r.post('/internal/users', _withInternal(_createInternalUser));
     r.get('/internal/users/<id>/flags', _withInternal(_getInternalFlags));
+    r.post('/internal/users/bulk', _withInternal(_getInternalUsers));
 
     return r;
   }
@@ -356,6 +357,41 @@ class UserController {
     if (user == null) return _json(404, {'error': 'user_not_found'});
 
     return _json(200, _flagsToJson(user));
+  }
+
+  Future<Response> _getInternalUsers(Request request) async {
+    final body = await _tryReadJson(request);
+    if (body == null) return _json(400, {'error': 'invalid_json'});
+
+    final userIds = _parseIdList(body['userIds']);
+    if (userIds == null || userIds.isEmpty) {
+      return _json(400, {'error': 'userIds_required'});
+    }
+
+    final roleId = body['roleId'] as String?;
+    final disciplineId = body['disciplineId'] as String?;
+
+    final users = await _users.listUsersByIds(
+      userIds,
+      roleId: roleId,
+      disciplineId: disciplineId,
+    );
+
+    final ids = users.map((u) => u.id).toList();
+    final rolesMap = await _users.getRolesForUsers(ids);
+    final disciplinesMap = await _users.getDisciplinesForUsers(ids);
+
+    final items = users
+        .map((user) => _userToJson(
+              user,
+              includeEmail: true,
+              includeFlags: true,
+              roles: rolesMap[user.id] ?? <DictionaryEntry>[],
+              disciplines: disciplinesMap[user.id] ?? <DictionaryEntry>[],
+            ))
+        .toList();
+
+    return _json(200, {'users': items});
   }
 
   Future<Map<String, dynamic>?> _tryReadJson(Request request) async {

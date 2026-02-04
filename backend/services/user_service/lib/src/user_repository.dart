@@ -281,6 +281,46 @@ class UserRepository {
     return rows.map(_mapUser).toList();
   }
 
+  Future<List<UserRecord>> listUsersByIds(
+    List<String> userIds, {
+    String? roleId,
+    String? disciplineId,
+  }) async {
+    if (userIds.isEmpty) return <UserRecord>[];
+
+    final joins = <String>[];
+    final conditions = <String>['u.id = ANY(@user_ids)'];
+    final params = <String, dynamic>{'user_ids': userIds};
+
+    if (roleId != null && roleId.isNotEmpty) {
+      joins.add('JOIN user_roles ur ON ur.user_id = u.id');
+      conditions.add('ur.role_id = @role_id');
+      params['role_id'] = roleId;
+    }
+
+    if (disciplineId != null && disciplineId.isNotEmpty) {
+      joins.add('JOIN user_disciplines ud ON ud.user_id = u.id');
+      conditions.add('ud.discipline_id = @discipline_id');
+      params['discipline_id'] = disciplineId;
+    }
+
+    final buffer = StringBuffer(
+      'SELECT DISTINCT u.id, u.email, u.first_name, u.last_name, u.institute, '
+      'u."group", u.avatar_url, u.is_admin, u.is_super_admin, u.is_banned '
+      'FROM users u ',
+    );
+
+    if (joins.isNotEmpty) {
+      buffer.write('${joins.join(' ')} ');
+    }
+
+    buffer.write('WHERE ${conditions.join(' AND ')} ');
+    buffer.write('ORDER BY u.id');
+
+    final rows = await _conn.query(buffer.toString(), substitutionValues: params);
+    return rows.map(_mapUser).toList();
+  }
+
   Future<bool> setAdminStatus(String userId, bool isAdmin) async {
     final result = await _conn.query(
       'UPDATE users SET is_admin = @is_admin WHERE id = @id RETURNING id',
