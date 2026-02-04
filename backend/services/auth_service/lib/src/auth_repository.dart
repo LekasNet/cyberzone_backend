@@ -6,9 +6,9 @@ class AuthRepository {
 
   AuthRepository(this._conn);
 
-  Future<User?> findByEmail(String email) async {
+  Future<AuthUser?> findByEmail(String email) async {
     final result = await _conn.query(
-      'SELECT id, email, password_hash, is_admin, is_super_admin, is_banned '
+      'SELECT id, email, password_hash '
           'FROM users WHERE email = @email',
       substitutionValues: {'email': email},
     );
@@ -17,43 +17,37 @@ class AuthRepository {
 
     final row = result.first;
 
-    return User(
+    return AuthUser(
       id: row[0].toString(),
       email: row[1] as String,
       passwordHash: row[2] as String,
-      isAdmin: row[3] as bool,
-      isSuperAdmin: row[4] as bool,
-      isBanned: row[5] as bool,
     );
   }
 
-  Future<User?> findById(String id) async {
+  Future<AuthUser?> findById(String id) async {
     final result = await _conn.query(
-      'SELECT id, email, password_hash, is_admin, is_super_admin, is_banned '
+      'SELECT id, email, password_hash '
           'FROM users WHERE id = @id',
       substitutionValues: {'id': id},
     );
     if (result.isEmpty) return null;
     final row = result.first;
-    return User(
+    return AuthUser(
       id: row[0].toString(),
       email: row[1] as String,
       passwordHash: row[2] as String,
-      isAdmin: row[3] as bool,
-      isSuperAdmin: row[4] as bool,
-      isBanned: row[5] as bool,
     );
   }
 
 
-  Future<User> createUser({
+  Future<AuthUser> createUser({
     required String id,
     required String email,
     required String passwordHash,
   }) async {
     await _conn.query(
-      'INSERT INTO users (id, email, password_hash, is_admin, is_super_admin, is_banned) '
-          'VALUES (@id, @email, @password_hash, false, false, false)',
+      'INSERT INTO users (id, email, password_hash) '
+          'VALUES (@id, @email, @password_hash)',
       substitutionValues: {
         'id': id,
         'email': email,
@@ -61,13 +55,17 @@ class AuthRepository {
       },
     );
 
-    return User(
+    return AuthUser(
       id: id,
       email: email,
       passwordHash: passwordHash,
-      isAdmin: false,
-      isSuperAdmin: false,
-      isBanned: false,
+    );
+  }
+
+  Future<void> deleteById(String id) async {
+    await _conn.query(
+      'DELETE FROM users WHERE id = @id',
+      substitutionValues: {'id': id},
     );
   }
 }

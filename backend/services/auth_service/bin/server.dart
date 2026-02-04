@@ -12,6 +12,7 @@ import 'package:auth_service/src/jwt_config.dart';
 import 'package:auth_service/src/jwt_service.dart';
 import 'package:auth_service/src/password_hasher.dart';
 import 'package:auth_service/src/refresh_repository.dart';
+import 'package:auth_service/src/user_service_client.dart';
 
 Future<void> main(List<String> args) async {
   try {
@@ -28,6 +29,7 @@ Future<void> main(List<String> args) async {
     final usersRepo = AuthRepository(db.connection);
     final refreshRepo = RefreshRepository(db.connection);
     final hasher = const PasswordHasher();
+    final userService = UserServiceClient(config: UserServiceConfig.fromEnv());
 
     final authController = AuthController(
       users: usersRepo,
@@ -35,6 +37,7 @@ Future<void> main(List<String> args) async {
       hasher: hasher,
       jwt: jwtService,
       jwtConfig: jwtConfig,
+      userService: userService,
     );
 
     final router = Router()

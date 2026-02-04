@@ -11,6 +11,7 @@ import 'jwt_service.dart';
 import 'jwt_config.dart';
 import 'token_utils.dart';
 import 'auth_middleware.dart';
+import 'user_service_client.dart';
 
 class AuthController {
   final AuthRepository _users;
@@ -18,6 +19,7 @@ class AuthController {
   final PasswordHasher _hasher;
   final JwtService _jwt;
   final JwtConfig _jwtConfig;
+  final UserServiceClient _userService;
 
   final _uuid = const Uuid();
 
@@ -27,11 +29,13 @@ class AuthController {
     required PasswordHasher hasher,
     required JwtService jwt,
     required JwtConfig jwtConfig,
+    required UserServiceClient userService,
   })  : _users = users,
         _refresh = refresh,
         _hasher = hasher,
         _jwt = jwt,
-        _jwtConfig = jwtConfig;
+        _jwtConfig = jwtConfig,
+        _userService = userService;
 
   Router get router {
     final r = Router();
@@ -70,7 +74,16 @@ class AuthController {
 
     final user = await _users.createUser(id: userId, email: email, passwordHash: hash);
 
-    final tokens = await _issueTokens(user.id, user.isAdmin, user.isSuperAdmin, user.isBanned);
+    late final UserFlags flags;
+    try {
+      flags = await _userService.createUser(userId: user.id, email: user.email);
+    } catch (_) {
+      await _users.deleteById(user.id);
+      return _json(502, {'error': 'user_service_unavailable'});
+    }
+
+    final tokens =
+        await _issueTokens(user.id, flags.isAdmin, flags.isSuperAdmin, flags.isBanned);
     return _json(201, {'userId': user.id, ...tokens});
   }
 
@@ -87,12 +100,20 @@ class AuthController {
     final user = await _users.findByEmail(email);
     if (user == null) return _json(401, {'error': 'invalid_credentials'});
 
-    if (user.isBanned) return _json(403, {'error': 'user_banned'});
-
     final ok = _hasher.verify(password, user.passwordHash);
     if (!ok) return _json(401, {'error': 'invalid_credentials'});
 
-    final tokens = await _issueTokens(user.id, user.isAdmin, user.isSuperAdmin, user.isBanned);
+    late final UserFlags flags;
+    try {
+      flags = await _userService.getFlags(user.id);
+    } catch (_) {
+      return _json(502, {'error': 'user_service_unavailable'});
+    }
+
+    if (flags.isBanned) return _json(403, {'error': 'user_banned'});
+
+    final tokens =
+        await _issueTokens(user.id, flags.isAdmin, flags.isSuperAdmin, flags.isBanned);
     return _json(200, tokens);
   }
 
@@ -115,12 +136,21 @@ class AuthController {
     // Подтягиваем флаги пользователя (admin/banned и т.д.)
     final user = await _users.findById(row.userId);
     if (user == null) return _json(401, {'error': 'user_not_found'});
-    if (user.isBanned) return _json(403, {'error': 'user_banned'});
+
+    late final UserFlags flags;
+    try {
+      flags = await _userService.getFlags(user.id);
+    } catch (_) {
+      return _json(502, {'error': 'user_service_unavailable'});
+    }
+
+    if (flags.isBanned) return _json(403, {'error': 'user_banned'});
 
     // rotation: старый токен помечаем revoked, выдаём новый
     await _refresh.revoke(row.id);
 
-    final tokens = await _issueTokens(user.id, user.isAdmin, user.isSuperAdmin, user.isBanned);
+    final tokens =
+        await _issueTokens(user.id, flags.isAdmin, flags.isSuperAdmin, flags.isBanned);
     return _json(200, tokens);
   }
 
