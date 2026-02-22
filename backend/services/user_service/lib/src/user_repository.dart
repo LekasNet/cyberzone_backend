@@ -321,6 +321,25 @@ class UserRepository {
     return rows.map(_mapUser).toList();
   }
 
+  Future<List<String>> listUserIds({List<String>? roleIds}) async {
+    if (roleIds != null && roleIds.isNotEmpty) {
+      final rows = await _conn.query(
+        'SELECT DISTINCT u.id '
+        'FROM users u '
+        'JOIN user_roles ur ON ur.user_id = u.id '
+        'WHERE ur.role_id = ANY(@role_ids) '
+        'ORDER BY u.id',
+        substitutionValues: {'role_ids': roleIds},
+      );
+      return rows.map((row) => row[0].toString()).toList();
+    }
+
+    final rows = await _conn.query(
+      'SELECT id FROM users ORDER BY id',
+    );
+    return rows.map((row) => row[0].toString()).toList();
+  }
+
   Future<bool> setAdminStatus(String userId, bool isAdmin) async {
     final result = await _conn.query(
       'UPDATE users SET is_admin = @is_admin WHERE id = @id RETURNING id',

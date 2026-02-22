@@ -8,6 +8,7 @@ import 'package:user_service/src/db.dart';
 import 'package:user_service/src/dictionary_repository.dart';
 import 'package:user_service/src/jwt_config.dart';
 import 'package:user_service/src/jwt_service.dart';
+import 'package:user_service/src/rating_service_client.dart';
 import 'package:user_service/src/user_controller.dart';
 import 'package:user_service/src/user_repository.dart';
 
@@ -24,6 +25,8 @@ Future<void> main(List<String> args) async {
     final jwtService = JwtService(jwtConfig);
     final internalKey =
         Platform.environment['INTERNAL_API_KEY'] ?? 'dev_internal_key';
+    final ratingService =
+        RatingServiceClient(config: RatingServiceConfig.fromEnv());
 
     final usersRepo = UserRepository(db.connection);
     final dictionariesRepo = DictionaryRepository(db.connection);
@@ -33,6 +36,7 @@ Future<void> main(List<String> args) async {
       dictionaries: dictionariesRepo,
       jwt: jwtService,
       internalKey: internalKey,
+      ratings: ratingService,
     );
 
     final router = userController.router

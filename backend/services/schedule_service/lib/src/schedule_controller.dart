@@ -7,21 +7,25 @@ import 'package:uuid/uuid.dart';
 import 'auth_middleware.dart';
 import 'availability_repository.dart';
 import 'models.dart';
+import 'rating_service_client.dart';
 import 'user_service_client.dart';
 import 'jwt_service.dart';
 
 class ScheduleController {
   final AvailabilityRepository _availability;
   final UserServiceClient _users;
+  final RatingServiceClient _ratings;
   final JwtService _jwt;
   final _uuid = const Uuid();
 
   ScheduleController({
     required AvailabilityRepository availability,
     required UserServiceClient users,
+    required RatingServiceClient ratings,
     required JwtService jwt,
   })  : _availability = availability,
         _users = users,
+        _ratings = ratings,
         _jwt = jwt;
 
   Router get router {
@@ -163,8 +167,13 @@ class ScheduleController {
   Future<Response> _searchAvailability(Request request) async {
     final params = request.url.queryParameters;
 
-    if (params.containsKey('minRating')) {
-      return _json(400, {'error': 'minRating_not_supported'});
+    final minRatingRaw = params['minRating'];
+    double? minRating;
+    if (minRatingRaw != null) {
+      minRating = double.tryParse(minRatingRaw);
+      if (minRating == null || minRating < 0) {
+        return _json(400, {'error': 'invalid_min_rating'});
+      }
     }
 
     final date = _parseDate(params['date']);
@@ -205,6 +214,15 @@ class ScheduleController {
 
     if (users.isEmpty) return _json(200, {'users': []});
 
+    Map<String, RatingSummary> ratings = {};
+    if (minRating != null) {
+      try {
+        ratings = await _ratings.fetchRatingsBulk(userIds: userIds);
+      } catch (_) {
+        return _json(502, {'error': 'rating_service_unavailable'});
+      }
+    }
+
     final allowedIds = users.map((u) => u['id'] as String).toSet();
     final slotsByUser = <String, List<AvailabilitySlot>>{};
 
@@ -213,10 +231,25 @@ class ScheduleController {
       slotsByUser.putIfAbsent(slot.userId, () => <AvailabilitySlot>[]).add(slot);
     }
 
-    final items = users.map((user) {
+    final items = users.where((user) {
+      if (minRating == null) return true;
+      final userId = user['id'] as String?;
+      if (userId == null) return false;
+      final rating = ratings[userId];
+      final avg = rating?.averageScore ?? 0;
+      return avg >= minRating!;
+    }).map((user) {
       final copy = Map<String, dynamic>.from(user);
       final userSlots = slotsByUser[user['id']] ?? <AvailabilitySlot>[];
       copy['availability'] = userSlots.map((s) => s.toJson()).toList();
+      if (minRating != null) {
+        final userId = user['id'] as String?;
+        if (userId != null) {
+          final rating = ratings[userId];
+          copy['rating'] = rating?.toJson() ??
+              {'userId': userId, 'averageScore': 0, 'totalEvents': 0};
+        }
+      }
       return copy;
     }).toList();
 

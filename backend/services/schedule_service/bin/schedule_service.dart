@@ -8,6 +8,7 @@ import 'package:schedule_service/src/availability_repository.dart';
 import 'package:schedule_service/src/db.dart';
 import 'package:schedule_service/src/jwt_config.dart';
 import 'package:schedule_service/src/jwt_service.dart';
+import 'package:schedule_service/src/rating_service_client.dart';
 import 'package:schedule_service/src/schedule_controller.dart';
 import 'package:schedule_service/src/user_service_client.dart';
 
@@ -24,11 +25,14 @@ Future<void> main(List<String> args) async {
     final jwtService = JwtService(jwtConfig);
 
     final userService = UserServiceClient(config: UserServiceConfig.fromEnv());
+    final ratingService =
+        RatingServiceClient(config: RatingServiceConfig.fromEnv());
     final availabilityRepo = AvailabilityRepository(db.connection);
 
     final controller = ScheduleController(
       availability: availabilityRepo,
       users: userService,
+      ratings: ratingService,
       jwt: jwtService,
     );
 

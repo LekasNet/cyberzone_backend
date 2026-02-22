@@ -1,14 +1,19 @@
-name: event_service
-description: A sample command-line application.
+﻿name: event_service
+description: Cyberzone event service.
 version: 1.0.0
 # repository: https://github.com/my_org/my_repo
 
 environment:
   sdk: ^3.9.2
 
-# Add regular dependencies here.
 dependencies:
-  path: ^1.9.0
+  shelf: any
+  shelf_router: any
+  postgres: ^2.6.3
+  uuid: ^4.4.0
+  dart_jsonwebtoken: ^3.3.0
+  http: ^1.2.2
+  shelf_swagger_ui: ^1.0.0
 
 dev_dependencies:
   lints: ^6.0.0

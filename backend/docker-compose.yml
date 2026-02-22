@@ -1,0 +1,190 @@
+﻿version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: cyberzone-postgres
+    environment:
+      POSTGRES_USER: cyberzone
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d
+      - ./:/workspace:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cyberzone -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  auth_service:
+    build: ./services/auth_service
+    environment:
+      PORT: "8080"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: cyberzone_auth
+      DB_USER: cyberzone
+      DB_PASSWORD: password
+      JWT_SECRET: dev_secret_change_me
+      JWT_ISSUER: cyberzone
+      INTERNAL_API_KEY: dev_internal_key
+      USER_SERVICE_URL: http://user_service:8081
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    restart: on-failure
+
+  user_service:
+    build: ./services/user_service
+    environment:
+      PORT: "8081"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: cyberzone_user
+      DB_USER: cyberzone
+      DB_PASSWORD: password
+      JWT_SECRET: dev_secret_change_me
+      JWT_ISSUER: cyberzone
+      INTERNAL_API_KEY: dev_internal_key
+      RATING_SERVICE_URL: http://rating_service:8084
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    restart: on-failure
+
+  schedule_service:
+    build: ./services/schedule_service
+    environment:
+      PORT: "8082"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: cyberzone_schedule
+      DB_USER: cyberzone
+      DB_PASSWORD: password
+      JWT_SECRET: dev_secret_change_me
+      JWT_ISSUER: cyberzone
+      INTERNAL_API_KEY: dev_internal_key
+      USER_SERVICE_URL: http://user_service:8081
+      RATING_SERVICE_URL: http://rating_service:8084
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8082:8082"
+    restart: on-failure
+
+  event_service:
+    build: ./services/event_service
+    environment:
+      PORT: "8083"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: cyberzone_event
+      DB_USER: cyberzone
+      DB_PASSWORD: password
+      JWT_SECRET: dev_secret_change_me
+      JWT_ISSUER: cyberzone
+      INTERNAL_API_KEY: dev_internal_key
+      USER_SERVICE_URL: http://user_service:8081
+      CHAT_SERVICE_URL: http://chat_service:8085
+      NOTIFICATION_SERVICE_URL: http://notification_service:8086
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8083:8083"
+    restart: on-failure
+
+  rating_service:
+    build: ./services/rating_service
+    environment:
+      PORT: "8084"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: cyberzone_rating
+      DB_USER: cyberzone
+      DB_PASSWORD: password
+      JWT_SECRET: dev_secret_change_me
+      JWT_ISSUER: cyberzone
+      INTERNAL_API_KEY: dev_internal_key
+      USER_SERVICE_URL: http://user_service:8081
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8084:8084"
+    restart: on-failure
+
+  chat_service:
+    build: ./services/chat_service
+    environment:
+      PORT: "8085"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: cyberzone_chat
+      DB_USER: cyberzone
+      DB_PASSWORD: password
+      JWT_SECRET: dev_secret_change_me
+      JWT_ISSUER: cyberzone
+      INTERNAL_API_KEY: dev_internal_key
+      USER_SERVICE_URL: http://user_service:8081
+      EVENT_SERVICE_URL: http://event_service:8083
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8085:8085"
+    restart: on-failure
+
+  notification_service:
+    build: ./services/notification_service
+    environment:
+      PORT: "8086"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: cyberzone_notification
+      DB_USER: cyberzone
+      DB_PASSWORD: password
+      JWT_SECRET: dev_secret_change_me
+      JWT_ISSUER: cyberzone
+      INTERNAL_API_KEY: dev_internal_key
+      NOTIFICATIONS_ENABLED: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8086:8086"
+    restart: on-failure
+
+  api_gateway:
+    build:
+      context: .
+      dockerfile: services/api_gateway/Dockerfile
+    environment:
+      PORT: "8087"
+      AUTH_SERVICE_URL: http://auth_service:8080
+      USER_SERVICE_URL: http://user_service:8081
+      SCHEDULE_SERVICE_URL: http://schedule_service:8082
+      EVENT_SERVICE_URL: http://event_service:8083
+      RATING_SERVICE_URL: http://rating_service:8084
+      CHAT_SERVICE_URL: http://chat_service:8085
+      NOTIFICATION_SERVICE_URL: http://notification_service:8086
+      SPEC_PATHS: /app/services/auth_service/specs/openapi.yaml;/app/services/user_service/specs/openapi.yaml;/app/services/schedule_service/specs/openapi.yaml;/app/services/event_service/specs/openapi.yaml;/app/services/rating_service/specs/openapi.yaml;/app/services/chat_service/specs/openapi.yaml;/app/services/notification_service/specs/openapi.yaml
+    depends_on:
+      - auth_service
+      - user_service
+      - schedule_service
+      - event_service
+      - rating_service
+      - chat_service
+      - notification_service
+    ports:
+      - "8087:8087"
+    restart: on-failure

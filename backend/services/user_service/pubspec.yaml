@@ -12,6 +12,7 @@ dependencies:
   postgres: ^2.6.3
   dart_jsonwebtoken: ^3.3.0
   shelf_swagger_ui: ^1.0.0
+  http: ^1.2.2
 
 dev_dependencies:
   lints: ^6.0.0

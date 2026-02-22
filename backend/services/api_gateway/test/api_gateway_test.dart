@@ -2,7 +2,10 @@ import 'package:api_gateway/api_gateway.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('calculate', () {
-    expect(calculate(), 42);
+  test('gateway config parses environment', () {
+    final config = GatewayConfig.fromEnv();
+    expect(config.authUrl.scheme, isNotEmpty);
+    expect(config.userUrl.scheme, isNotEmpty);
+    expect(config.port, greaterThan(0));
   });
 }

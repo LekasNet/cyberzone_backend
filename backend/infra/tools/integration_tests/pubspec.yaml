@@ -1,0 +1,13 @@
+﻿name: integration_tests
+description: Cross-service integration tests for Cyberzone backend.
+version: 0.1.0
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+  http: ^1.2.2
+  postgres: ^2.6.3
+  uuid: ^4.4.0
+  yaml: ^3.1.2
+  web_socket_channel: ^2.4.0

@@ -7,6 +7,7 @@ import 'auth_middleware.dart';
 import 'dictionary_repository.dart';
 import 'jwt_service.dart';
 import 'models.dart';
+import 'rating_service_client.dart';
 import 'user_repository.dart';
 
 class UserController {
@@ -14,16 +15,19 @@ class UserController {
   final DictionaryRepository _dictionaries;
   final JwtService _jwt;
   final String _internalKey;
+  final RatingServiceClient _ratings;
 
   UserController({
     required UserRepository users,
     required DictionaryRepository dictionaries,
     required JwtService jwt,
     required String internalKey,
+    required RatingServiceClient ratings,
   })  : _users = users,
         _dictionaries = dictionaries,
         _jwt = jwt,
-        _internalKey = internalKey;
+        _internalKey = internalKey,
+        _ratings = ratings;
 
   Router get router {
     final r = Router();
@@ -53,6 +57,7 @@ class UserController {
     r.post('/internal/users', _withInternal(_createInternalUser));
     r.get('/internal/users/<id>/flags', _withInternal(_getInternalFlags));
     r.post('/internal/users/bulk', _withInternal(_getInternalUsers));
+    r.post('/internal/users/ids', _withInternal(_getInternalUserIds));
 
     return r;
   }
@@ -236,9 +241,14 @@ class UserController {
     final roleId = request.url.queryParameters['roleId'];
     final disciplineId = request.url.queryParameters['disciplineId'];
     final search = request.url.queryParameters['search'];
+    final minRatingRaw = request.url.queryParameters['minRating'];
+    double? minRating;
 
-    if (request.url.queryParameters.containsKey('minRating')) {
-      return _json(400, {'error': 'minRating_not_supported'});
+    if (minRatingRaw != null) {
+      minRating = double.tryParse(minRatingRaw);
+      if (minRating == null || minRating < 0) {
+        return _json(400, {'error': 'invalid_min_rating'});
+      }
     }
 
     final users = await _users.listUsers(
@@ -250,8 +260,23 @@ class UserController {
     final userIds = users.map((u) => u.id).toList();
     final rolesMap = await _users.getRolesForUsers(userIds);
     final disciplinesMap = await _users.getDisciplinesForUsers(userIds);
+    Map<String, RatingSummary> ratings = {};
+
+    if (minRating != null && userIds.isNotEmpty) {
+      try {
+        ratings = await _ratings.fetchRatingsBulk(userIds: userIds);
+      } catch (_) {
+        return _json(502, {'error': 'rating_service_unavailable'});
+      }
+    }
 
     final items = users
+        .where((user) {
+          if (minRating == null) return true;
+          final rating = ratings[user.id];
+          final avg = rating?.averageScore ?? 0;
+          return avg >= minRating!;
+        })
         .map((user) => _userToJson(
               user,
               includeEmail: true,
@@ -260,6 +285,16 @@ class UserController {
               disciplines: disciplinesMap[user.id] ?? <DictionaryEntry>[],
             ))
         .toList();
+
+    if (minRating != null) {
+      for (final item in items) {
+        final userId = item['id'] as String?;
+        if (userId == null) continue;
+        final rating = ratings[userId];
+        item['rating'] =
+            rating?.toJson() ?? {'userId': userId, 'averageScore': 0, 'totalEvents': 0};
+      }
+    }
 
     return _json(200, {'users': items});
   }
@@ -275,11 +310,21 @@ class UserController {
     final roles = await _users.getUserRoles(id);
     final disciplines = await _users.getUserDisciplines(id);
 
-    return _json(200, _userToJson(user,
+    final map = _userToJson(user,
         includeEmail: true,
         includeFlags: true,
         roles: roles,
-        disciplines: disciplines));
+        disciplines: disciplines);
+
+    try {
+      final ratings = await _ratings.fetchRatingsBulk(userIds: [id]);
+      final rating = ratings[id];
+      map['rating'] = rating?.toJson() ?? {'userId': id, 'averageScore': 0, 'totalEvents': 0};
+    } catch (_) {
+      map['rating'] = {'userId': id, 'averageScore': 0, 'totalEvents': 0};
+    }
+
+    return _json(200, map);
   }
 
   Future<Response> _makeAdmin(Request request) async {
@@ -392,6 +437,20 @@ class UserController {
         .toList();
 
     return _json(200, {'users': items});
+  }
+
+  Future<Response> _getInternalUserIds(Request request) async {
+    final body = await _tryReadJson(request);
+    if (body == null) return _json(400, {'error': 'invalid_json'});
+
+    List<String>? roleIds;
+    if (body.containsKey('roleIds')) {
+      roleIds = _parseIdList(body['roleIds']);
+      if (roleIds == null) return _json(400, {'error': 'invalid_role_ids'});
+    }
+
+    final userIds = await _users.listUserIds(roleIds: roleIds);
+    return _json(200, {'userIds': userIds});
   }
 
   Future<Map<String, dynamic>?> _tryReadJson(Request request) async {
