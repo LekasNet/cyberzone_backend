@@ -122,19 +122,27 @@ Future<void> runWebSocketScenario({
   final chatId = chat['chatId'] as String;
   final wsUri = _buildWsUri(
     base: config.chatUrl,
-    path: '/chats/$chatId/ws',
+    path: '/chats/ws',
     token: userToken,
   );
 
   final channel = WebSocketChannel.connect(wsUri);
   logger.add('ws.connect', 'WebSocket connected', data: {'uri': wsUri.toString()});
   final messages = <Map<String, dynamic>>[];
+  final subscribed = Completer<void>();
   final done = Completer<void>();
 
   channel.stream.listen((data) {
     if (data is! String) return;
     final parsed = _decodeJson(data);
     if (parsed == null) return;
+    if (parsed['type'] == 'subscribed') {
+      if (!subscribed.isCompleted) {
+        subscribed.complete();
+      }
+      logger.add('ws.subscribed', 'Subscribed to chats', data: parsed);
+      return;
+    }
     if (parsed['text'] is String) {
       messages.add(parsed);
       logger.add('ws.message', 'Message received', data: parsed);
@@ -144,8 +152,20 @@ Future<void> runWebSocketScenario({
     }
   });
 
+  final subscribePayload = {
+    'type': 'subscribe',
+    'chatIds': [chatId],
+  };
+  channel.sink.add(jsonEncode(subscribePayload));
+  logger.add('ws.subscribe', 'Subscribe sent', data: subscribePayload);
+  await subscribed.future.timeout(const Duration(seconds: 5));
+
   for (var i = 1; i <= 3; i += 1) {
-    final payload = {'text': 'ws message $i'};
+    final payload = {
+      'type': 'message',
+      'chatId': chatId,
+      'text': 'ws message $i',
+    };
     channel.sink.add(jsonEncode(payload));
     logger.add('ws.send', 'Message sent', data: payload);
   }

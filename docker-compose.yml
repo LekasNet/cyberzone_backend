@@ -177,6 +177,9 @@ services:
       CHAT_SERVICE_URL: http://chat_service:8085
       NOTIFICATION_SERVICE_URL: http://notification_service:8086
       SPEC_PATHS: /app/services/auth_service/specs/openapi.yaml;/app/services/user_service/specs/openapi.yaml;/app/services/schedule_service/specs/openapi.yaml;/app/services/event_service/specs/openapi.yaml;/app/services/rating_service/specs/openapi.yaml;/app/services/chat_service/specs/openapi.yaml;/app/services/notification_service/specs/openapi.yaml
+      TUNA_TOKEN: ${TUNA_TOKEN}
+      TUNA_HTTP_SUBDOMAIN: cyberzone
+      TUNA_WS_SUBDOMAIN: cyberzone-ws
     depends_on:
       - auth_service
       - user_service

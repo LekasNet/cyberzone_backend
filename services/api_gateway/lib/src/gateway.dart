@@ -1,8 +1,12 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
 import 'package:shelf_swagger_ui/shelf_swagger_ui.dart';
+import 'package:shelf_web_socket/shelf_web_socket.dart';
+import 'package:web_socket_channel/io.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'gateway_config.dart';
 import 'openapi_aggregator.dart';
@@ -36,6 +40,7 @@ class ApiGateway {
       ).call,
     );
 
+    _mountWebSocketRoutes(router);
     _mountProxyRoutes(router);
 
     return Pipeline()
@@ -72,6 +77,59 @@ class ApiGateway {
         (request) => proxy.forward(request, upstream));
   }
 
+  void _mountWebSocketRoutes(Router router) {
+    router.get('/chats/ws',
+        (request) => _proxyWebSocket(request, config.chatUrl));
+    router.get('/chats/<chatId>/ws',
+        (request) => _proxyWebSocket(request, config.chatUrl));
+  }
+
+  Future<Response> _proxyWebSocket(Request request, Uri upstream) async {
+    final wsUri = _buildWsUri(request, upstream);
+    final headers = _filteredHeaders(request.headers);
+    _applyForwardedHeaders(headers, request);
+
+    final handler = webSocketHandler((WebSocketChannel client) async {
+      WebSocket upstreamSocket;
+      try {
+        upstreamSocket = await WebSocket.connect(
+          wsUri.toString(),
+          headers: headers,
+        );
+      } catch (_) {
+        client.sink.close();
+        return;
+      }
+
+      final upstreamChannel = IOWebSocketChannel(upstreamSocket);
+
+      client.stream.listen(
+        (data) => upstreamChannel.sink.add(data),
+        onDone: () => upstreamChannel.sink.close(),
+        onError: (_) => upstreamChannel.sink.close(),
+      );
+
+      upstreamChannel.stream.listen(
+        (data) => client.sink.add(data),
+        onDone: () => client.sink.close(),
+        onError: (_) => client.sink.close(),
+      );
+    });
+
+    return handler(request);
+  }
+
+  Uri _buildWsUri(Request request, Uri upstream) {
+    final scheme = upstream.scheme == 'https' ? 'wss' : 'ws';
+    final path = request.requestedUri.path;
+    final joined = _joinPaths(upstream.path, path);
+    return upstream.replace(
+      scheme: scheme,
+      path: joined,
+      query: request.requestedUri.query,
+    );
+  }
+
   Future<Response> _health(Request request) async {
     return Response.ok(
       jsonEncode({'status': 'ok'}),
@@ -102,6 +160,60 @@ Middleware _blockInternalRoutes() {
     };
   };
 }
+
+String _joinPaths(String basePath, String path) {
+  if (basePath.isEmpty || basePath == '/') {
+    return path;
+  }
+  if (path.isEmpty || path == '/') {
+    return basePath;
+  }
+  if (basePath.endsWith('/') && path.startsWith('/')) {
+    return basePath + path.substring(1);
+  }
+  if (!basePath.endsWith('/') && !path.startsWith('/')) {
+    return '$basePath/$path';
+  }
+  return basePath + path;
+}
+
+Map<String, String> _filteredHeaders(Map<String, String> headers) {
+  final result = <String, String>{};
+  headers.forEach((key, value) {
+    final lower = key.toLowerCase();
+    if (_hopByHopHeaders.contains(lower) || lower == 'host') return;
+    result[key] = value;
+  });
+  return result;
+}
+
+void _applyForwardedHeaders(Map<String, String> headers, Request request) {
+  final connInfo = request.context['shelf.io.connection_info'];
+  if (connInfo is HttpConnectionInfo) {
+    final existing = headers['x-forwarded-for'];
+    final address = connInfo.remoteAddress.address;
+    headers['x-forwarded-for'] =
+        existing == null || existing.isEmpty ? address : '$existing, $address';
+  }
+
+  headers['x-forwarded-proto'] = request.requestedUri.scheme;
+
+  final host = request.headers['host'];
+  if (host != null && host.isNotEmpty) {
+    headers['x-forwarded-host'] = host;
+  }
+}
+
+const Set<String> _hopByHopHeaders = {
+  'connection',
+  'keep-alive',
+  'proxy-authenticate',
+  'proxy-authorization',
+  'te',
+  'trailer',
+  'transfer-encoding',
+  'upgrade',
+};
 
 String _toYaml(Map<String, dynamic> data, {int indent = 0}) {
   final buffer = StringBuffer();

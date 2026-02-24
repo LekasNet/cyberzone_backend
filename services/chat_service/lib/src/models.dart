@@ -1,14 +1,18 @@
-﻿class ChatRecord {
+class ChatRecord {
   final String id;
-  final String eventId;
+  final String? eventId;
   final bool isActive;
   final DateTime createdAt;
+  final String type;
+  final String? title;
 
   ChatRecord({
     required this.id,
     required this.eventId,
     required this.isActive,
     required this.createdAt,
+    required this.type,
+    required this.title,
   });
 
   Map<String, dynamic> toJson() => {
@@ -16,6 +20,8 @@
         'eventId': eventId,
         'isActive': isActive,
         'createdAt': createdAt.toUtc().toIso8601String(),
+        'type': type,
+        'title': title,
       };
 }
 

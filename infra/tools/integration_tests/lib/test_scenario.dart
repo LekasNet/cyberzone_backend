@@ -429,6 +429,33 @@ Future<void> runScenario({
   );
   final chatId = chatCreate['chatId'] as String;
 
+  final permanentChat = await _postJson(
+    client,
+    logger,
+    urls.chatUrl.resolve('/chats/permanent'),
+    {'title': 'General Chat'},
+    token: adminToken,
+    expectedStatus: 201,
+  );
+  final permanentChatId = permanentChat['chatId'] as String;
+
+  await _getJson(
+    client,
+    logger,
+    urls.chatUrl.resolve('/chats/permanent'),
+    token: userToken,
+    expectedStatus: 200,
+  );
+
+  await _postJson(
+    client,
+    logger,
+    urls.chatUrl.resolve('/chats/$permanentChatId/messages'),
+    {'text': 'Hello permanent chat'},
+    token: userToken,
+    expectedStatus: 201,
+  );
+
   await _putJson(
     client,
     logger,

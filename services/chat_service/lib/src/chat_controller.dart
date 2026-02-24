@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
@@ -22,7 +22,8 @@ class ChatController {
   final JwtService _jwt;
   final String _internalKey;
   final _uuid = const Uuid();
-  final Map<String, Set<WebSocketChannel>> _channels = {};
+  final Map<String, Set<WebSocketChannel>> _channelsByChat = {};
+  final Map<WebSocketChannel, Set<String>> _subsByChannel = {};
 
   ChatController({
     required ChatRepository chats,
@@ -47,10 +48,15 @@ class ChatController {
     r.put('/chats/<id>/activate', _withInternal(_activateChat));
     r.put('/chats/<id>/deactivate', _withInternal(_deactivateChat));
 
+    r.get('/chats/permanent', _withAuth(_listPermanentChats));
+    r.post('/chats/permanent', _withAuth(_createPermanentChat));
+
     r.get('/events/<eventId>/chat', _withAuth(_getChatByEvent));
     r.get('/chats/<chatId>/messages', _withAuth(_listMessages));
     r.post('/chats/<chatId>/messages', _withAuth(_sendMessage));
+
     r.get('/chats/<chatId>/ws', _handleWebSocket);
+    r.get('/chats/ws', _handleGlobalWebSocket);
 
     return r;
   }
@@ -97,6 +103,36 @@ class ChatController {
     return _json(201, {'chatId': chat.id});
   }
 
+  Future<Response> _createPermanentChat(Request request) async {
+    final auth = requireAuth(request);
+    if (!_isAdmin(auth)) {
+      return _json(403, {'error': 'forbidden'});
+    }
+
+    final body = await _tryReadJson(request);
+    if (body == null) return _json(400, {'error': 'invalid_json'});
+
+    final title = (body['title'] as String?)?.trim();
+    if (title == null || title.isEmpty) {
+      return _json(400, {'error': 'title_required'});
+    }
+
+    final chat = await _chats.createPermanentChat(
+      id: _uuid.v4(),
+      title: title,
+      createdBy: auth.claims.userId,
+    );
+
+    return _json(201, chat.toJson());
+  }
+
+  Future<Response> _listPermanentChats(Request request) async {
+    final chats = await _chats.listPermanentChats();
+    return _json(200, {
+      'chats': chats.map((chat) => chat.toJson()).toList(),
+    });
+  }
+
   Future<Response> _activateChat(Request request) async {
     final chatId = request.params['id'];
     if (chatId == null || chatId.isEmpty) {
@@ -131,7 +167,7 @@ class ChatController {
     final chat = await _chats.findByEventId(eventId);
     if (chat == null) return _json(404, {'error': 'chat_not_found'});
 
-    final allowed = await _isAllowed(eventId, auth);
+    final allowed = await _canAccessChat(chat, auth);
     if (!allowed) return _json(403, {'error': 'forbidden'});
 
     return _json(200, chat.toJson());
@@ -151,16 +187,14 @@ class ChatController {
     final chat = await _chats.findById(chatId);
     if (chat == null) return _json(404, {'error': 'chat_not_found'});
 
-    final isAdmin = auth.claims.isAdmin || auth.claims.isSuperAdmin;
-    if (!isAdmin) {
-      final allowed = await _isAllowed(chat.eventId, auth);
-      if (!allowed) return _json(403, {'error': 'forbidden'});
-    }
+    final allowed = await _canAccessChat(chat, auth);
+    if (!allowed) return _json(403, {'error': 'forbidden'});
 
+    final isAdmin = _isAdmin(auth);
     final userInfo = await _fetchUser(auth.claims.userId);
 
     final handler = webSocketHandler((WebSocketChannel channel) {
-      _registerChannel(chatId, channel);
+      _subscribe(chatId, channel);
 
       channel.stream.listen(
         (data) async {
@@ -177,41 +211,124 @@ class ChatController {
             return;
           }
 
-          final currentChat = await _chats.findById(chatId);
-          if (currentChat == null) {
-            _sendWsError(channel, 'chat_not_found');
+          await _processChatMessage(
+            chatId: chatId,
+            text: text,
+            auth: auth,
+            userInfo: userInfo,
+            isAdmin: isAdmin,
+            channel: channel,
+          );
+        },
+        onDone: () => _cleanupChannel(channel),
+        onError: (_) => _cleanupChannel(channel),
+      );
+    });
+
+    return handler(request);
+  }
+
+  Future<Response> _handleGlobalWebSocket(Request request) async {
+    final auth = _authFromRequest(request);
+    if (auth == null) {
+      return _json(401, {'error': 'missing_bearer_token'});
+    }
+
+    final isAdmin = _isAdmin(auth);
+    final userInfo = await _fetchUser(auth.claims.userId);
+
+    final handler = webSocketHandler((WebSocketChannel channel) {
+      channel.stream.listen(
+        (data) async {
+          if (data is! String) return;
+          final parsed = _decodeJson(data);
+          if (parsed == null) {
+            _sendWsError(channel, 'invalid_json');
             return;
           }
 
-          if (!currentChat.isActive && !isAdmin) {
-            _sendWsError(channel, 'chat_inactive');
-            return;
-          }
+          final type = parsed['type'] as String?;
 
-          if (!isAdmin) {
-            final allowed = await _isAllowed(currentChat.eventId, auth);
-            if (!allowed) {
-              _sendWsError(channel, 'forbidden');
+          if (type == 'subscribe') {
+            final chatIds = _parseIdList(parsed['chatIds']) ??
+                _singleId(parsed['chatId']);
+            if (chatIds == null || chatIds.isEmpty) {
+              _sendWsError(channel, 'chatIds_required');
               return;
             }
+
+            final allowed = <String>[];
+            final denied = <String>[];
+
+            for (final id in chatIds) {
+              final chat = await _chats.findById(id);
+              if (chat == null) {
+                denied.add(id);
+                continue;
+              }
+              if (await _canAccessChat(chat, auth)) {
+                _subscribe(id, channel);
+                allowed.add(id);
+              } else {
+                denied.add(id);
+              }
+            }
+
+            channel.sink.add(jsonEncode({
+              'type': 'subscribed',
+              'chatIds': allowed,
+              if (denied.isNotEmpty) 'denied': denied,
+            }));
+            return;
           }
 
-          final message = await _messages.createMessage(
-            id: _uuid.v4(),
+          if (type == 'unsubscribe') {
+            final chatIds = _parseIdList(parsed['chatIds']) ??
+                _singleId(parsed['chatId']);
+            if (chatIds == null || chatIds.isEmpty) {
+              _sendWsError(channel, 'chatIds_required');
+              return;
+            }
+
+            for (final id in chatIds) {
+              _unsubscribe(id, channel);
+            }
+
+            channel.sink.add(jsonEncode({
+              'type': 'unsubscribed',
+              'chatIds': chatIds,
+            }));
+            return;
+          }
+
+          final chatId = parsed['chatId'] as String?;
+          final text = parsed['text'] as String?;
+          if (chatId == null || chatId.isEmpty) {
+            _sendWsError(channel, 'chatId_required');
+            return;
+          }
+          if (text == null || text.trim().isEmpty) {
+            _sendWsError(channel, 'text_required');
+            return;
+          }
+
+          final subscribed = _subsByChannel[channel]?.contains(chatId) ?? false;
+          if (!subscribed) {
+            _sendWsError(channel, 'not_subscribed');
+            return;
+          }
+
+          await _processChatMessage(
             chatId: chatId,
-            userId: auth.claims.userId,
-            text: text.trim(),
+            text: text,
+            auth: auth,
+            userInfo: userInfo,
+            isAdmin: isAdmin,
+            channel: channel,
           );
-
-          final payload = message.toJson();
-          if (userInfo != null) {
-            payload['user'] = userInfo;
-          }
-
-          _broadcast(chatId, payload);
         },
-        onDone: () => _unregisterChannel(chatId, channel),
-        onError: (_) => _unregisterChannel(chatId, channel),
+        onDone: () => _cleanupChannel(channel),
+        onError: (_) => _cleanupChannel(channel),
       );
     });
 
@@ -228,7 +345,7 @@ class ChatController {
     final chat = await _chats.findById(chatId);
     if (chat == null) return _json(404, {'error': 'chat_not_found'});
 
-    final allowed = await _isAllowed(chat.eventId, auth);
+    final allowed = await _canAccessChat(chat, auth);
     if (!allowed) return _json(403, {'error': 'forbidden'});
 
     final limit = _parseLimit(request.url.queryParameters['limit']);
@@ -297,16 +414,14 @@ class ChatController {
       return _json(400, {'error': 'text_required'});
     }
 
-    final isAdmin = auth.claims.isAdmin || auth.claims.isSuperAdmin;
+    final isAdmin = _isAdmin(auth);
 
     if (!chat.isActive && !isAdmin) {
       return _json(403, {'error': 'chat_inactive'});
     }
 
-    if (!isAdmin) {
-      final allowed = await _isAllowed(chat.eventId, auth);
-      if (!allowed) return _json(403, {'error': 'forbidden'});
-    }
+    final allowed = await _canAccessChat(chat, auth);
+    if (!allowed) return _json(403, {'error': 'forbidden'});
 
     final message = await _messages.createMessage(
       id: _uuid.v4(),
@@ -346,8 +461,14 @@ class ChatController {
     }
   }
 
-  Future<bool> _isAllowed(String eventId, AuthContext auth) async {
-    if (auth.claims.isAdmin || auth.claims.isSuperAdmin) return true;
+  bool _isAdmin(AuthContext auth) =>
+      auth.claims.isAdmin || auth.claims.isSuperAdmin;
+
+  Future<bool> _canAccessChat(ChatRecord chat, AuthContext auth) async {
+    if (_isAdmin(auth)) return true;
+    if (chat.type == 'permanent') return true;
+    final eventId = chat.eventId;
+    if (eventId == null) return false;
     try {
       return await _events.isUserInCast(
         eventId: eventId,
@@ -358,22 +479,41 @@ class ChatController {
     }
   }
 
-  void _registerChannel(String chatId, WebSocketChannel channel) {
-    final set = _channels.putIfAbsent(chatId, () => <WebSocketChannel>{});
+  void _subscribe(String chatId, WebSocketChannel channel) {
+    final set =
+        _channelsByChat.putIfAbsent(chatId, () => <WebSocketChannel>{});
     set.add(channel);
+    final subs = _subsByChannel.putIfAbsent(channel, () => <String>{});
+    subs.add(chatId);
   }
 
-  void _unregisterChannel(String chatId, WebSocketChannel channel) {
-    final set = _channels[chatId];
+  void _unsubscribe(String chatId, WebSocketChannel channel) {
+    final subs = _subsByChannel[channel];
+    subs?.remove(chatId);
+
+    final set = _channelsByChat[chatId];
     if (set == null) return;
     set.remove(channel);
     if (set.isEmpty) {
-      _channels.remove(chatId);
+      _channelsByChat.remove(chatId);
+    }
+  }
+
+  void _cleanupChannel(WebSocketChannel channel) {
+    final subs = _subsByChannel.remove(channel);
+    if (subs == null) return;
+    for (final chatId in subs) {
+      final set = _channelsByChat[chatId];
+      if (set == null) continue;
+      set.remove(channel);
+      if (set.isEmpty) {
+        _channelsByChat.remove(chatId);
+      }
     }
   }
 
   void _broadcast(String chatId, Map<String, dynamic> payload) {
-    final set = _channels[chatId];
+    final set = _channelsByChat[chatId];
     if (set == null || set.isEmpty) return;
     final encoded = jsonEncode(payload);
     for (final channel in set) {
@@ -450,6 +590,67 @@ class ChatController {
     } catch (_) {
       return null;
     }
+    return null;
+  }
+
+  Future<void> _processChatMessage({
+    required String chatId,
+    required String text,
+    required AuthContext auth,
+    required Map<String, dynamic>? userInfo,
+    required bool isAdmin,
+    required WebSocketChannel channel,
+  }) async {
+    final currentChat = await _chats.findById(chatId);
+    if (currentChat == null) {
+      _sendWsError(channel, 'chat_not_found');
+      return;
+    }
+
+    if (!currentChat.isActive && !isAdmin) {
+      _sendWsError(channel, 'chat_inactive');
+      return;
+    }
+
+    final allowed = await _canAccessChat(currentChat, auth);
+    if (!allowed) {
+      _sendWsError(channel, 'forbidden');
+      return;
+    }
+
+    final message = await _messages.createMessage(
+      id: _uuid.v4(),
+      chatId: chatId,
+      userId: auth.claims.userId,
+      text: text.trim(),
+    );
+
+    final payload = message.toJson();
+    if (userInfo != null) {
+      payload['user'] = userInfo;
+    }
+
+    _broadcast(chatId, payload);
+  }
+
+  List<String>? _parseIdList(dynamic value) {
+    if (value == null) return null;
+    if (value is! List) return null;
+    final result = <String>[];
+    for (final item in value) {
+      if (item is String) {
+        result.add(item);
+      } else if (item is int) {
+        result.add(item.toString());
+      } else {
+        return null;
+      }
+    }
+    return result;
+  }
+
+  List<String>? _singleId(dynamic value) {
+    if (value is String && value.isNotEmpty) return [value];
     return null;
   }
 
