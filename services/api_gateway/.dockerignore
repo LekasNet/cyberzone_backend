@@ -1,0 +1,11 @@
+﻿.dart_tool/
+.pub-cache/
+build/
+.idea/
+.git/
+.gitignore
+*.iml
+.DS_Store
+node_modules/
+coverage/
+*.log

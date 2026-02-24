@@ -23,7 +23,9 @@ WORKDIR /app/services/api_gateway
 RUN dart pub get
 
 COPY services/api_gateway /app/services/api_gateway
-RUN chmod +x /app/services/api_gateway/docker/entrypoint.sh
+RUN rm -rf /app/services/api_gateway/.dart_tool \
+    && dart pub get \
+    && chmod +x /app/services/api_gateway/docker/entrypoint.sh
 
 COPY services/auth_service/specs /app/services/auth_service/specs
 COPY services/user_service/specs /app/services/user_service/specs
