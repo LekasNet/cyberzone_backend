@@ -1,0 +1,82 @@
+﻿openapi: 3.0.3
+info:
+  title: Cyberzone Rating Service
+  version: 0.1.0
+servers:
+  - url: http://localhost:8084
+paths:
+  /health:
+    get:
+      responses:
+        "200": { description: OK }
+  /events/{id}/ratings:
+    post:
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ratings]
+              properties:
+                ratings:
+                  type: array
+                  items:
+                    type: object
+                    required: [userId, score]
+                    properties:
+                      userId: { type: string }
+                      score: { type: integer }
+                      comment: { type: string, nullable: true }
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid input }
+        "403": { description: Forbidden }
+    get:
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /ratings/users/{id}:
+    get:
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /ratings/users:
+    get:
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: roleIds
+          schema:
+            type: array
+            items: { type: string }
+          style: form
+          explode: true
+      responses:
+        "200": { description: OK }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

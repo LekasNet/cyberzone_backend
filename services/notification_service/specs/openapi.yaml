@@ -1,0 +1,157 @@
+openapi: 3.0.3
+info:
+  title: Cyberzone Notification Service
+  version: 0.1.0
+servers:
+  - url: http://localhost:8086
+paths:
+  /health:
+    get:
+      responses:
+        "200": { description: OK }
+  /notifications/register_token:
+    post:
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deviceToken, platform]
+              properties:
+                deviceToken: { type: string }
+                platform: { type: string, example: "android" }
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid params }
+  /notifications/unregister_token:
+    delete:
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deviceToken]
+              properties:
+                deviceToken: { type: string }
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid params }
+  /notifications/event_call:
+    post:
+      parameters:
+        - in: header
+          name: x-internal-key
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [eventId, userIds]
+              properties:
+                eventId: { type: string }
+                userIds:
+                  type: array
+                  items: { type: string }
+                roles:
+                  type: array
+                  items: { type: string }
+                type:
+                  type: string
+                  enum: [normal, emergency]
+                title: { type: string }
+                message: { type: string }
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid params }
+        "401": { description: Unauthorized }
+  /notifications/event_status_changed:
+    post:
+      parameters:
+        - in: header
+          name: x-internal-key
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [eventId, newStatus, userIds]
+              properties:
+                eventId: { type: string }
+                newStatus: { type: string }
+                userIds:
+                  type: array
+                  items: { type: string }
+                title: { type: string }
+                message: { type: string }
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid params }
+        "401": { description: Unauthorized }
+  /notifications/application_status_changed:
+    post:
+      parameters:
+        - in: header
+          name: x-internal-key
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [eventId, userId, newStatus]
+              properties:
+                eventId: { type: string }
+                userId: { type: string }
+                newStatus: { type: string }
+                title: { type: string }
+                message: { type: string }
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid params }
+        "401": { description: Unauthorized }
+  /notifications/chat_message:
+    post:
+      parameters:
+        - in: header
+          name: x-internal-key
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [chatId, messageId, userIds]
+              properties:
+                chatId: { type: string }
+                messageId: { type: string }
+                userIds:
+                  type: array
+                  items: { type: string }
+                title: { type: string }
+                message: { type: string }
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid params }
+        "401": { description: Unauthorized }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

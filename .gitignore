@@ -72,8 +72,8 @@ test-results/
 # =========================
 # Generated OpenAPI (if ever)
 # =========================
-openapi.json
-openapi.yaml
+#openapi.json
+#openapi.yaml
 
 # =========================
 # Temporary files

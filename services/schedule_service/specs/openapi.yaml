@@ -1,0 +1,113 @@
+﻿openapi: 3.0.3
+info:
+  title: Cyberzone Schedule Service
+  version: 0.1.0
+servers:
+  - url: http://localhost:8082
+paths:
+  /health:
+    get:
+      responses:
+        "200": { description: OK }
+  /availability/me:
+    get:
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: from
+          schema: { type: string, format: date }
+        - in: query
+          name: to
+          schema: { type: string, format: date }
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid date range }
+        "401": { description: Unauthorized }
+    post:
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [date, timeFrom, timeTo]
+              properties:
+                date: { type: string, format: date }
+                timeFrom: { type: string, example: "10:00" }
+                timeTo: { type: string, example: "12:00" }
+      responses:
+        "201": { description: Created }
+        "400": { description: Invalid slot }
+  /availability/me/{id}:
+    put:
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [date, timeFrom, timeTo]
+              properties:
+                date: { type: string, format: date }
+                timeFrom: { type: string, example: "10:00" }
+                timeTo: { type: string, example: "12:00" }
+      responses:
+        "200": { description: OK }
+        "404": { description: Not found }
+    delete:
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+        "404": { description: Not found }
+  /availability/search:
+    get:
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: date
+          required: true
+          schema: { type: string, format: date }
+        - in: query
+          name: fromTime
+          required: true
+          schema: { type: string, example: "10:00" }
+        - in: query
+          name: toTime
+          required: true
+          schema: { type: string, example: "12:00" }
+        - in: query
+          name: roleId
+          schema: { type: string }
+        - in: query
+          name: disciplineId
+          schema: { type: string }
+        - in: query
+          name: minRating
+          schema: { type: number }
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid params }
+        "403": { description: Forbidden }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

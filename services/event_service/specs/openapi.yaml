@@ -1,0 +1,395 @@
+﻿openapi: 3.0.3
+info:
+  title: Cyberzone Event Service
+  version: 0.1.0
+servers:
+  - url: http://localhost:8083
+paths:
+  /health:
+    get:
+      responses:
+        "200": { description: OK }
+  /events:
+    get:
+      parameters:
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+        - in: query
+          name: disciplineId
+          schema: { type: string }
+        - in: query
+          name: roleId
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid params }
+    post:
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, description, disciplineId, startsAt, endsAt]
+              properties:
+                title: { type: string }
+                description: { type: string }
+                disciplineId: { type: string }
+                startsAt: { type: string, format: date-time }
+                endsAt: { type: string, format: date-time }
+                streamUrl: { type: string, nullable: true }
+                roles:
+                  type: array
+                  items:
+                    type: object
+                    required: [roleId, requiredCount]
+                    properties:
+                      roleId: { type: string }
+                      requiredCount: { type: integer }
+      responses:
+        "201": { description: Created }
+        "400": { description: Invalid input }
+        "403": { description: Forbidden }
+  /events/{id}:
+    get:
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+        "404": { description: Not found }
+    put:
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, description, disciplineId, startsAt, endsAt]
+              properties:
+                title: { type: string }
+                description: { type: string }
+                disciplineId: { type: string }
+                startsAt: { type: string, format: date-time }
+                endsAt: { type: string, format: date-time }
+                streamUrl: { type: string, nullable: true }
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid input }
+        "403": { description: Forbidden }
+        "404": { description: Not found }
+    delete:
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+        "403": { description: Forbidden }
+        "404": { description: Not found }
+  /events/{id}/roles:
+    put:
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [roles]
+              properties:
+                roles:
+                  type: array
+                  items:
+                    type: object
+                    required: [roleId, requiredCount]
+                    properties:
+                      roleId: { type: string }
+                      requiredCount: { type: integer }
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid roles }
+  /events/{id}/status:
+    put:
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string }
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid status }
+  /events/{id}/apply:
+    post:
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [roleIds]
+              properties:
+                roleIds:
+                  type: array
+                  items: { type: string }
+      responses:
+        "201": { description: Created }
+        "400": { description: Invalid input }
+  /events/{id}/my_applications:
+    get:
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /events/{id}/applications:
+    get:
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+        "403": { description: Forbidden }
+  /events/{id}/applications/{applicationId}:
+    put:
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: applicationId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [approved, rejected] }
+      responses:
+        "200": { description: OK }
+        "404": { description: Not found }
+    delete:
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: applicationId
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+        "404": { description: Not found }
+  /events/{id}/cast:
+    get:
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+    put:
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cast]
+              properties:
+                cast:
+                  type: array
+                  items:
+                    type: object
+                    required: [userId, roleId]
+                    properties:
+                      userId: { type: string }
+                      roleId: { type: string }
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid cast }
+  /events/{id}/approve_cast:
+    post:
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                createChat: { type: boolean }
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid params }
+  /events/{id}/finish:
+    post:
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /events/{id}/call:
+    post:
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                roles:
+                  type: array
+                  items: { type: string }
+                roleIds:
+                  type: array
+                  items: { type: string }
+                userIds:
+                  type: array
+                  items: { type: string }
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid params }
+        "404": { description: Not found }
+        "502": { description: Upstream unavailable }
+  /events/{id}/call_emergency:
+    post:
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                roles:
+                  type: array
+                  items: { type: string }
+                roleIds:
+                  type: array
+                  items: { type: string }
+                userIds:
+                  type: array
+                  items: { type: string }
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid params }
+        "404": { description: Not found }
+        "502": { description: Upstream unavailable }
+  /internal/events/{id}/cast/check:
+    get:
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: userId
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid params }
+        "404": { description: Not found }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
