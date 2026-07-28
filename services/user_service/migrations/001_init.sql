@@ -4,6 +4,8 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT NOT NULL UNIQUE,
   first_name TEXT NULL,
   last_name TEXT NULL,
+  nickname TEXT NULL,
+  phone TEXT NULL,
   institute TEXT NULL,
   "group" TEXT NULL,
   avatar_url TEXT NULL,
@@ -16,12 +18,14 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS roles (
   id UUID PRIMARY KEY,
-  name TEXT NOT NULL UNIQUE
+  name TEXT NOT NULL UNIQUE,
+  color TEXT NULL
 );
 
 CREATE TABLE IF NOT EXISTS disciplines (
   id UUID PRIMARY KEY,
-  name TEXT NOT NULL UNIQUE
+  name TEXT NOT NULL UNIQUE,
+  color TEXT NULL
 );
 
 CREATE TABLE IF NOT EXISTS user_roles (

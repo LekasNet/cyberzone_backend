@@ -260,6 +260,8 @@ Future<void> runScenario({
     {
       'firstName': 'Test',
       'lastName': 'User',
+      'nickname': 'TestNick',
+      'phone': '+79991234567',
       'institute': 'Cyber Institute',
       'group': 'TG-1',
       'avatarUrl': null,

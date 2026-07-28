@@ -31,6 +31,8 @@ paths:
               properties:
                 firstName: { type: string, nullable: true }
                 lastName: { type: string, nullable: true }
+                nickname: { type: string, nullable: true }
+                phone: { type: string, nullable: true }
                 institute: { type: string, nullable: true }
                 group: { type: string, nullable: true }
                 avatarUrl: { type: string, nullable: true }

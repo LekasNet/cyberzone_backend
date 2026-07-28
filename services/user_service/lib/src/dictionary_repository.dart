@@ -9,24 +9,26 @@ class DictionaryRepository {
 
   Future<List<DictionaryEntry>> listRoles() async {
     final rows = await _conn.query(
-      'SELECT id, name FROM roles ORDER BY name',
+      'SELECT id, name, color FROM roles ORDER BY name',
     );
     return rows
         .map((row) => DictionaryEntry(
               id: row[0].toString(),
               name: row[1] as String,
+              color: row[2] as String?,
             ))
         .toList();
   }
 
   Future<List<DictionaryEntry>> listDisciplines() async {
     final rows = await _conn.query(
-      'SELECT id, name FROM disciplines ORDER BY name',
+      'SELECT id, name, color FROM disciplines ORDER BY name',
     );
     return rows
         .map((row) => DictionaryEntry(
               id: row[0].toString(),
               name: row[1] as String,
+              color: row[2] as String?,
             ))
         .toList();
   }

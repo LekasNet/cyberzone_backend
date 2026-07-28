@@ -6,6 +6,8 @@
 \connect cyberzone_user
 \i /workspace/services/user_service/migrations/001_init.sql
 \i /workspace/services/user_service/migrations/002_seed.sql
+\i /workspace/services/user_service/migrations/003_add_profile_fields.sql
+\i /workspace/services/user_service/migrations/004_add_dictionary_colors.sql
 
 \connect cyberzone_schedule
 \i /workspace/services/schedule_service/migrations/001_init.sql

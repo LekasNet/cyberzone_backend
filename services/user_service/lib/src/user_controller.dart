@@ -128,6 +128,10 @@ class UserController {
       firstName: update.firstName,
       hasLastName: update.hasLastName,
       lastName: update.lastName,
+      hasNickname: update.hasNickname,
+      nickname: update.nickname,
+      hasPhone: update.hasPhone,
+      phone: update.phone,
       hasInstitute: update.hasInstitute,
       institute: update.institute,
       hasGroup: update.hasGroup,
@@ -275,7 +279,7 @@ class UserController {
           if (minRating == null) return true;
           final rating = ratings[user.id];
           final avg = rating?.averageScore ?? 0;
-          return avg >= minRating!;
+          return avg >= minRating;
         })
         .map((user) => _userToJson(
               user,
@@ -494,6 +498,20 @@ class UserController {
       update.hasInstitute = true;
     }
 
+    if (body.containsKey('nickname')) {
+      final value = body['nickname'];
+      if (value != null && value is! String) return null;
+      update.nickname = value as String?;
+      update.hasNickname = true;
+    }
+
+    if (body.containsKey('phone')) {
+      final value = body['phone'];
+      if (value != null && value is! String) return null;
+      update.phone = value as String?;
+      update.hasPhone = true;
+    }
+
     if (body.containsKey('group')) {
       final value = body['group'];
       if (value != null && value is! String) return null;
@@ -548,6 +566,8 @@ class UserController {
       'id': user.id,
       'firstName': user.firstName,
       'lastName': user.lastName,
+      'nickname': user.nickname,
+      'phone': user.phone,
       'institute': user.institute,
       'group': user.group,
       'avatarUrl': user.avatarUrl,
@@ -579,16 +599,26 @@ class UserController {
 class _ProfileUpdate {
   bool hasFirstName = false;
   bool hasLastName = false;
+  bool hasNickname = false;
+  bool hasPhone = false;
   bool hasInstitute = false;
   bool hasGroup = false;
   bool hasAvatarUrl = false;
 
   String? firstName;
   String? lastName;
+  String? nickname;
+  String? phone;
   String? institute;
   String? group;
   String? avatarUrl;
 
   bool get hasAny =>
-      hasFirstName || hasLastName || hasInstitute || hasGroup || hasAvatarUrl;
+      hasFirstName ||
+      hasLastName ||
+      hasNickname ||
+      hasPhone ||
+      hasInstitute ||
+      hasGroup ||
+      hasAvatarUrl;
 }

@@ -9,8 +9,8 @@ class UserRepository {
 
   Future<UserRecord?> findById(String id) async {
     final result = await _conn.query(
-      'SELECT id, email, first_name, last_name, institute, "group", avatar_url, '
-      'is_admin, is_super_admin, is_banned '
+      'SELECT id, email, first_name, last_name, nickname, phone, institute, "group", '
+      'avatar_url, is_admin, is_super_admin, is_banned '
       'FROM users WHERE id = @id',
       substitutionValues: {'id': id},
     );
@@ -22,8 +22,8 @@ class UserRepository {
 
   Future<UserRecord?> findByEmail(String email) async {
     final result = await _conn.query(
-      'SELECT id, email, first_name, last_name, institute, "group", avatar_url, '
-      'is_admin, is_super_admin, is_banned '
+      'SELECT id, email, first_name, last_name, nickname, phone, institute, "group", '
+      'avatar_url, is_admin, is_super_admin, is_banned '
       'FROM users WHERE email = @email',
       substitutionValues: {'email': email},
     );
@@ -39,7 +39,7 @@ class UserRepository {
     final result = await _conn.query(
       'INSERT INTO users (id, email, is_admin, is_super_admin, is_banned) '
       'VALUES (@id, @email, false, false, false) '
-      'RETURNING id, email, first_name, last_name, institute, "group", '
+      'RETURNING id, email, first_name, last_name, nickname, phone, institute, "group", '
       'avatar_url, is_admin, is_super_admin, is_banned',
       substitutionValues: {
         'id': id,
@@ -56,6 +56,10 @@ class UserRepository {
     String? firstName,
     bool hasLastName = false,
     String? lastName,
+    bool hasNickname = false,
+    String? nickname,
+    bool hasPhone = false,
+    String? phone,
     bool hasInstitute = false,
     String? institute,
     bool hasGroup = false,
@@ -73,6 +77,14 @@ class UserRepository {
     if (hasLastName) {
       updates.add('last_name = @last_name');
       params['last_name'] = lastName;
+    }
+    if (hasNickname) {
+      updates.add('nickname = @nickname');
+      params['nickname'] = nickname;
+    }
+    if (hasPhone) {
+      updates.add('phone = @phone');
+      params['phone'] = phone;
     }
     if (hasInstitute) {
       updates.add('institute = @institute');
@@ -95,7 +107,7 @@ class UserRepository {
 
     final sql =
         'UPDATE users SET ${updates.join(', ')} WHERE id = @id '
-        'RETURNING id, email, first_name, last_name, institute, "group", '
+        'RETURNING id, email, first_name, last_name, nickname, phone, institute, "group", '
         'avatar_url, is_admin, is_super_admin, is_banned';
 
     final result = await _conn.query(sql, substitutionValues: params);
@@ -105,7 +117,7 @@ class UserRepository {
 
   Future<List<DictionaryEntry>> getUserRoles(String userId) async {
     final rows = await _conn.query(
-      'SELECT r.id, r.name '
+      'SELECT r.id, r.name, r.color '
       'FROM user_roles ur '
       'JOIN roles r ON r.id = ur.role_id '
       'WHERE ur.user_id = @user_id '
@@ -117,13 +129,14 @@ class UserRepository {
         .map((row) => DictionaryEntry(
               id: row[0].toString(),
               name: row[1] as String,
+              color: row[2] as String?,
             ))
         .toList();
   }
 
   Future<List<DictionaryEntry>> getUserDisciplines(String userId) async {
     final rows = await _conn.query(
-      'SELECT d.id, d.name '
+      'SELECT d.id, d.name, d.color '
       'FROM user_disciplines ud '
       'JOIN disciplines d ON d.id = ud.discipline_id '
       'WHERE ud.user_id = @user_id '
@@ -135,6 +148,7 @@ class UserRepository {
         .map((row) => DictionaryEntry(
               id: row[0].toString(),
               name: row[1] as String,
+              color: row[2] as String?,
             ))
         .toList();
   }
@@ -144,7 +158,7 @@ class UserRepository {
     if (userIds.isEmpty) return {};
 
     final rows = await _conn.query(
-      'SELECT ur.user_id, r.id, r.name '
+      'SELECT ur.user_id, r.id, r.name, r.color '
       'FROM user_roles ur '
       'JOIN roles r ON r.id = ur.role_id '
       'WHERE ur.user_id = ANY(@user_ids) '
@@ -159,6 +173,7 @@ class UserRepository {
             DictionaryEntry(
               id: row[1].toString(),
               name: row[2] as String,
+              color: row[3] as String?,
             ),
           );
     }
@@ -171,7 +186,7 @@ class UserRepository {
     if (userIds.isEmpty) return {};
 
     final rows = await _conn.query(
-      'SELECT ud.user_id, d.id, d.name '
+      'SELECT ud.user_id, d.id, d.name, d.color '
       'FROM user_disciplines ud '
       'JOIN disciplines d ON d.id = ud.discipline_id '
       'WHERE ud.user_id = ANY(@user_ids) '
@@ -186,6 +201,7 @@ class UserRepository {
             DictionaryEntry(
               id: row[1].toString(),
               name: row[2] as String,
+              color: row[3] as String?,
             ),
           );
     }
@@ -257,13 +273,13 @@ class UserRepository {
     if (search != null && search.trim().isNotEmpty) {
       final q = '%${search.toLowerCase()}%';
       conditions.add(
-          '(LOWER(u.first_name) LIKE @q OR LOWER(u.last_name) LIKE @q OR LOWER(u.email) LIKE @q)');
+          '(LOWER(u.first_name) LIKE @q OR LOWER(u.last_name) LIKE @q OR LOWER(u.nickname) LIKE @q OR LOWER(u.email) LIKE @q OR LOWER(u.phone) LIKE @q)');
       params['q'] = q;
     }
 
     final buffer = StringBuffer(
-      'SELECT DISTINCT u.id, u.email, u.first_name, u.last_name, u.institute, '
-      'u."group", u.avatar_url, u.is_admin, u.is_super_admin, u.is_banned '
+      'SELECT DISTINCT u.id, u.email, u.first_name, u.last_name, u.nickname, u.phone, '
+      'u.institute, u."group", u.avatar_url, u.is_admin, u.is_super_admin, u.is_banned '
       'FROM users u ',
     );
 
@@ -305,8 +321,8 @@ class UserRepository {
     }
 
     final buffer = StringBuffer(
-      'SELECT DISTINCT u.id, u.email, u.first_name, u.last_name, u.institute, '
-      'u."group", u.avatar_url, u.is_admin, u.is_super_admin, u.is_banned '
+      'SELECT DISTINCT u.id, u.email, u.first_name, u.last_name, u.nickname, u.phone, '
+      'u.institute, u."group", u.avatar_url, u.is_admin, u.is_super_admin, u.is_banned '
       'FROM users u ',
     );
 
@@ -362,12 +378,14 @@ class UserRepository {
       email: row[1] as String,
       firstName: row[2] as String?,
       lastName: row[3] as String?,
-      institute: row[4] as String?,
-      group: row[5] as String?,
-      avatarUrl: row[6] as String?,
-      isAdmin: row[7] as bool,
-      isSuperAdmin: row[8] as bool,
-      isBanned: row[9] as bool,
+      nickname: row[4] as String?,
+      phone: row[5] as String?,
+      institute: row[6] as String?,
+      group: row[7] as String?,
+      avatarUrl: row[8] as String?,
+      isAdmin: row[9] as bool,
+      isSuperAdmin: row[10] as bool,
+      isBanned: row[11] as bool,
     );
   }
 }

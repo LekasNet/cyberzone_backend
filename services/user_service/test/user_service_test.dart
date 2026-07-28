@@ -8,6 +8,8 @@ void main() {
       email: 'test@example.com',
       firstName: 'Test',
       lastName: 'User',
+      nickname: null,
+      phone: null,
       institute: null,
       group: null,
       avatarUrl: null,
